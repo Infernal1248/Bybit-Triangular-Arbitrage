@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { log, error } = console;
 const socket = require("socket.io");
 const express = require("express");
