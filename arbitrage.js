@@ -107,7 +107,7 @@ function formatTxtEntry(d, kind, extra) {
   const profit = `{${d.value.toFixed(3)}%}`;
   const reason = extra?.reason ? `\n{reason:${extra.reason}}` : "";
   const dur = typeof extra?.durationSec === "number" ? `\n{duration:${extra.durationSec.toFixed(2)}s}` : "";
-  return `{${ts}}\n${body}\n${profit}${dur}${reason}\n\n";
+  return `{${ts}}\n${body}\n${profit}${dur}${reason}\n\n`;
 }
 function logFlow(kind, d, extra = {}) {
   try {
