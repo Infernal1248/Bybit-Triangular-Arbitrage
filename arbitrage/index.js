@@ -7,142 +7,30 @@ const events = require("events");
 const Websocket = require("ws");
 const { sort } = require("fast-sort");
 const { promisify } = require("util");
-const crypto = require("crypto");
-const fs = require("fs");
-const path = require("path");
 const delay = promisify(setTimeout);
 
-// ==== НАСТРОЙКИ ====
-const BYBIT_KEY = process.env.BYBIT_KEY || "";
-const BYBIT_SECRET = process.env.BYBIT_SECRET || "";
-const RECV_WINDOW = 5000;
-const FEE_MODE = (process.env.FEE_MODE || "taker").toLowerCase(); // 'taker' | 'maker'
-const DEFAULT_SPOT_FEE = 0.001; // 0.1% fallback
+const {
+  FLOW_THRESHOLD,
+  MIN_TICKS_TO_SHOW,
+  FLOW_NOCHANGE_CLOSE_MS,
+  FLOW_NOCHANGE_REQUIRE_ALL,
+  L1_HISTORY_LEN,
+  L1_MIN_DISTINCT_STATES,
+  L1_REQUIRE_MOVEMENT_TO_START,
+  L1_REQUIRE_MOVEMENT_TO_KEEP,
+} = require("./config");
 
-// Telegram
-const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
-const TG_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
-const TG_MIN_INTERVAL = Number(process.env.TELEGRAM_MIN_INTERVAL_MS || 3000);
-
-// Порог потока и стабильность
-const FLOW_THRESHOLD = Number(process.env.FLOW_THRESHOLD ?? 0.05);   // %
-const MIN_TICKS_TO_SHOW = Number(process.env.MIN_TICKS_TO_SHOW ?? 3);
-
-// Анти-залипание ПОСЛЕ старта (игнорим USDT-ноги)
-const FLOW_NOCHANGE_CLOSE_MS = Number(process.env.FLOW_NOCHANGE_CLOSE_MS ?? 30000);
-const FLOW_NOCHANGE_REQUIRE_ALL = String(process.env.FLOW_NOCHANGE_REQUIRE_ALL ?? "false").toLowerCase() === "true";
-
-// История L1
-const L1_HISTORY_LEN = Number(process.env.L1_HISTORY_LEN ?? 7); // "последние 5-7" — по умолчанию 7
-const L1_MIN_DISTINCT_STATES = Number(process.env.L1_MIN_DISTINCT_STATES ?? 2); // минимум разных снапшотов
-const L1_REQUIRE_MOVEMENT_TO_START = String(process.env.L1_REQUIRE_MOVEMENT_TO_START ?? "true").toLowerCase() === "true";
-const L1_REQUIRE_MOVEMENT_TO_KEEP = String(process.env.L1_REQUIRE_MOVEMENT_TO_KEEP ?? "true").toLowerCase() === "true";
-
-// ==== ЛОГИ ====
-const ARB_LOG_DIR = process.env.ARB_LOG_DIR || "logs";
-const ARB_LOG_FORMAT = (process.env.ARB_LOG_FORMAT || "json").toLowerCase(); // 'txt' | 'json'
-
-function fmtLocal(ts) {
-  const d = new Date(ts);
-  return new Intl.DateTimeFormat(undefined, {
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-    hour12: false
-  }).format(d).replace(",", "");
-}
-function logFileFor(ts) {
-  const d = new Date(ts);
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,"0");
-  const da = String(d.getDate()).padStart(2,"0");
-  const ext = ARB_LOG_FORMAT === "txt" ? ".txt" : ".jsonl";
-  return path.join(ARB_LOG_DIR, `${y}-${m}-${da}${ext}`);
-}
-function writeFlowEvent(evt) {
-  const file = logFileFor(evt.ts);
-  try {
-    if (ARB_LOG_FORMAT === "txt") {
-      const lines = [
-        fmtLocal(evt.ts),
-        evt.pathText || "",
-        `Profit: ${Number(evt.valuePct).toFixed(3)}%`,
-      ];
-      if (evt.kind === "end") {
-        const extra = [];
-        if (Number.isFinite(evt.durationSec)) extra.push(`Duration: ${evt.durationSec.toFixed(2)}s`);
-        if (evt.reason) extra.push(`Reason: ${evt.reason}`);
-        if (extra.length) lines.push(extra.join(" | "));
-      }
-      lines.push("");
-      fs.appendFile(file, lines.join("\n"), () => {});
-    } else {
-      const rec = {
-        ts: new Date(evt.ts).toISOString(),
-        kind: evt.kind,
-        valuePct: evt.valuePct,
-        pathText: evt.pathText,
-        durationSec: evt.durationSec ?? null,
-        reason: evt.reason ?? null,
-        pairId: evt.pairId,
-        lv1: evt.lv1, lv2: evt.lv2, lv3: evt.lv3,
-      };
-      fs.appendFile(file, JSON.stringify(rec) + "\n", () => {});
-    }
-  } catch (e) {
-    error("[log] writeFlowEvent error:", e.message);
-  }
-}
-function ensureLogDir() {
-  try { if (!fs.existsSync(ARB_LOG_DIR)) fs.mkdirSync(ARB_LOG_DIR, { recursive: true }); }
-  catch (e) { error("[log] mkdir error:", e.message); }
-}
-function logFilePath(d = new Date()) {
-  const day = d.toISOString().slice(0, 10);
-  const ext = ARB_LOG_FORMAT === "txt" ? "txt" : "json";
-  return path.join(ARB_LOG_DIR, `flows-${day}.${ext}`);
-}
-function formatTxtEntry(d, kind, extra) {
-  const ts = new Date().toISOString();
-  const body = d.tpath.replace(/<br\/>/g, "\n");
-  const profit = `{${d.value.toFixed(3)}%}`;
-  const reason = extra?.reason ? `\n{reason:${extra.reason}}` : "";
-  const dur = typeof extra?.durationSec === "number" ? `\n{duration:${extra.durationSec.toFixed(2)}s}` : "";
-  return `{${ts}}\n${body}\n${profit}${dur}${reason}\n\n`;
-}
-function logFlow(kind, d, extra = {}) {
-  try {
-    ensureLogDir();
-    const file = logFilePath();
-    if (ARB_LOG_FORMAT === "txt") {
-      fs.appendFileSync(file, formatTxtEntry(d, kind, extra), "utf8");
-    } else {
-      const row = {
-        ts: new Date().toISOString(),
-        kind,
-        valuePct: Number(d.value.toFixed(3)),
-        pathHtml: d.tpath,
-        pathText: d.tpath.replace(/<br\/>/g, "\n"),
-        durationSec: extra.durationSec ?? null,
-        reason: extra.reason ?? null,
-        pairId: pairId(d),
-        lv1: d.lv1, lv2: d.lv2, lv3: d.lv3
-      };
-      fs.appendFileSync(file, JSON.stringify(row) + "\n", "utf8");
-    }
-  } catch (e) {
-    error("[log] write error:", e.message);
-  }
-}
+const { sendTelegram, formatFlowStartMsg, formatFlowEndMsg } = require("./telegram");
+const { writeFlowEvent, logFlow } = require("./logger");
+const { fetchSpotFeeRates, getFee } = require("./fees");
 
 // ==== ГЛОБАЛ ====
 let pairs = [];
 let symValJ = {};     // { [symbol]: { bidPrice, askPrice, bidQty, askQty } }
-let feeRates = {};    // { [symbol]: { maker, taker } }
 let validSymbols = [];
 let ws = "";
 let subs = [];
 
-let lastTgSentAt = 0;
 let wsConnectedOnce = false;
 
 let tickCounters = Object.create(null);
@@ -164,79 +52,6 @@ let l1Hist = Object.create(null);
 
 const eventEmitter = new events();
 const pairId = (d) => `${d.lv1}|${d.lv2}|${d.lv3}`;
-
-// ==== подпись приватных запросов ====
-function signQuery(query) {
-  const timestamp = Date.now().toString();
-  const payload = `${timestamp}${BYBIT_KEY}${RECV_WINDOW}${query}`;
-  const sign = crypto.createHmac("sha256", BYBIT_SECRET).update(payload).digest("hex");
-  return { timestamp, sign };
-}
-
-// ==== Telegram ====
-async function sendTelegram(text, parseMode = "HTML", opts = {}) {
-  if (!TG_TOKEN || !TG_CHAT_ID) return;
-  const now = Date.now();
-  if (!opts.force && (now - lastTgSentAt < TG_MIN_INTERVAL)) return;
-  try {
-    await got.post(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-      json: { chat_id: TG_CHAT_ID, text, parse_mode: parseMode, disable_web_page_preview: true },
-      timeout: { request: 10000 },
-    });
-    if (!opts.force) lastTgSentAt = now;
-  } catch (e) {
-    error("[tg] sendMessage error:", e.message);
-  }
-}
-function formatFlowStartMsg(d) {
-  const path = d.tpath.replace(/<br\/>/g, "\n");
-  return `🟢 <b>Поток начался</b>\n<code>${d.value.toFixed(3)}%</code>\n${path}`;
-}
-function formatFlowEndMsg(d, durationSec, reason = "") {
-  const path = d.tpath.replace(/<br\/>/g, "\n");
-  const r = reason ? `\nПричина: <code>${reason}</code>` : "";
-  return `🛑 <b>Поток закончился</b>\nДлился: <code>${durationSec.toFixed(2)}s</code>\nПоследний профит: <code>${d.value.toFixed(3)}%</code>${r}\n${path}`;
-}
-
-// ==== комиссии spot ====
-async function fetchSpotFeeRates() {
-  if (!BYBIT_KEY || !BYBIT_SECRET) {
-    log("[fee] BYBIT_KEY/SECRET не заданы — применяю DEFAULT_SPOT_FEE ко всем парам");
-    return;
-  }
-  const endpoint = "https://api.bybit.com/v5/account/fee-rate";
-  const query = "category=spot";
-  const { timestamp, sign } = signQuery(query);
-  try {
-    const res = await got(`${endpoint}?${query}`, {
-      method: "GET",
-      headers: {
-        "X-BAPI-API-KEY": BYBIT_KEY,
-        "X-BAPI-SIGN": sign,
-        "X-BAPI-TIMESTAMP": timestamp,
-        "X-BAPI-RECV-WINDOW": RECV_WINDOW.toString(),
-      },
-      responseType: "json",
-      timeout: { request: 10000 },
-    });
-    const list = res.body?.result?.list || [];
-    list.forEach((it) => {
-      const s = it.symbol;
-      const maker = Number(it.makerFeeRate ?? DEFAULT_SPOT_FEE);
-      const taker = Number(it.takerFeeRate ?? DEFAULT_SPOT_FEE);
-      feeRates[s] = { maker, taker };
-    });
-    log(`[fee] Комиссии загружены для ${Object.keys(feeRates).length} символов (режим: ${FEE_MODE}).`);
-  } catch (e) {
-    error("[fee] Ошибка получения комиссий, использую DEFAULT_SPOT_FЕЕ:", e.message);
-  }
-}
-function getFee(symbol) {
-  const fr = feeRates[symbol];
-  if (!fr) return DEFAULT_SPOT_FEE;
-  return FEE_MODE === "maker" ? fr.maker : fr.taker;
-}
-
 // ==== инициализация ====
 const getPairs = async () => {
   try {
