@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Roboto:wght@100;300;400&display=swap");
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: Roboto;
+      }
+      body {
+        margin: 1rem 3rem;
+      }
+      header h1 {
+        font-weight: 400;
+        font-size: 3rem;
+      }
+      header h3 {
+        font-weight: 400;
+        font-size: 1.5rem;
+      }
+      header p {
+        font-weight: 300;
+        font-size: 1rem;
+      }
+      table {
+        margin-top: 2rem;
+        width: 100%;
+      }
+      table tr th {
+        background: #111;
+        color: white;
+        padding: 0.25rem 2rem;
+      }
+      table tr td {
+        padding: 0.25rem 2rem;
+        background: #b6fcc0;
+      }
+    </style>
+    <link rel="shortcut icon" href="JS/LogoBAT.ico" type="image/x-icon" />
+    <meta charset="utf-8" />
+    <title>Bybit Triangular Arbitrage Finder</title>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"
+      integrity="sha512-q/dWJ3kcmjBLU4Qc47E4A9kTB4m3wuTY7vkFJDTZKjTs8jhyGQnaUrxa0Ytd0ssMZhbNua9hE+E7Qv1j+DyZwA=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    ></script>
+  </head>
+  <body>
+    <header>
+  <h1>Bybit Triangular Arbitrage Scanner</h1>
+  <h3>v1.0 | Socket API | Обновления в реальном времени</h3>
+  <p>
+    Этот инструмент сканирует все торговые пары на спотовой бирже BYBIT
+    и отображает список доступных возможностей для треугольного арбитража.
+  </p>
+</header>
+    <table id="finTable" class="table table-bordered table-hover">
+      <thead class="thead-dark">
+        <tr>
+          <th>#</th>
+          <th>Последовательность</th>
+          <th>Profit%</th>
+        </tr>
+      </thead>
+      <tbody id="tartbitBody"></tbody>
+    </table>
+    <script src="JS/index.js"></script>
+  </body>
+</html>
