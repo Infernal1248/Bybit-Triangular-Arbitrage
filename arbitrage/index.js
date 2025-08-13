@@ -1,6 +1,3 @@
-// bybit_arb_bot_l1hist.js
-// Added: level-1 history (prices & sizes) and movement checks on last N snapshots
-
 const { log, error } = console;
 const got = require("got");
 const events = require("events");
@@ -208,9 +205,9 @@ function hasRecentL1Movement(symbol) {
 const processData = (pl) => {
   try {
     pl = JSON.parse(pl);
-    if (!pl.topic || !pl.topic.startsWith("orderbook.1.")) return;
+    if (!pl.topic || !pl.topic.startsWith("orderbook.5.")) return;
 
-    const symbol = pl.topic.slice("orderbook.1.".length);
+    const symbol = pl.topic.slice("orderbook.5.".length);
     const data = pl.data;
     if (
         !data ||
@@ -485,10 +482,10 @@ const processData = (pl) => {
 // ==== WS ====
 const wsconnect = () => {
   ws = new Websocket("wss://stream.bybit.com/v5/public/spot");
-  subs = validSymbols.map((symbol) => `orderbook.1.${symbol}`);
+  subs = validSymbols.map((symbol) => `orderbook.5.${symbol}`);
 
   ws.on("open", async () => {
-    log("[ws] Открыто. Подписываюсь на orderbook.1 для всех символов…");
+    log("[ws] Открыто. Подписываюсь на orderbook.5 для всех символов…");
 
     const chunkSize = 10;
     for (let i = 0; i < subs.length; i += chunkSize) {
