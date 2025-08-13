@@ -38,6 +38,9 @@ const L1_MIN_DISTINCT_STATES = Number(process.env.L1_MIN_DISTINCT_STATES ?? 2); 
 const L1_REQUIRE_MOVEMENT_TO_START = String(process.env.L1_REQUIRE_MOVEMENT_TO_START ?? "true").toLowerCase() === "true";
 const L1_REQUIRE_MOVEMENT_TO_KEEP = String(process.env.L1_REQUIRE_MOVEMENT_TO_KEEP ?? "true").toLowerCase() === "true";
 
+// Включать ли фильтры потоков (по умолчанию включено)
+const FLOW_FILTERS_ENABLED = String(process.env.FLOW_FILTERS_ENABLED ?? "true").toLowerCase() === "true";
+
 // ==== ЛОГИ ====
 const ARB_LOG_DIR = process.env.ARB_LOG_DIR || "logs";
 const ARB_LOG_FORMAT = (process.env.ARB_LOG_FORMAT || "json").toLowerCase(); // 'txt' | 'json'
@@ -433,6 +436,7 @@ const processData = (pl) => {
     pushL1(symbol, rb, bidQty, ra, askQty, now);
 
     // пересчитываем только пути с этим символом
+    const rawPayload = [];
     pairs
         .filter((d) => (d.lv1 + d.lv2 + d.lv3).includes(symbol))
         .forEach((d) => {
@@ -478,6 +482,12 @@ const processData = (pl) => {
 
           d.tpath = lv_str;
           d.value = parseFloat(((lv_calc - 1) * 100).toFixed(3));
+
+          // если фильтры отключены — сразу отправляем сырой результат
+          if (!FLOW_FILTERS_ENABLED) {
+            rawPayload.push({ ...d });
+            return;
+          }
 
           // ===== ПРОСТОЙ ЧЕК ОБЪЁМА: нужная сторона qty > 0 на каждой ноге
           const needSides = [
@@ -659,6 +669,11 @@ const processData = (pl) => {
           st.lastValue = d.value;
           flowState.set(id, st);
         });
+
+    if (!FLOW_FILTERS_ENABLED && rawPayload.length > 0) {
+      eventEmitter.emit("ARBITRAGE", sort(rawPayload).desc(u => u.value));
+      return;
+    }
 
     ensureBroadcastLoop();
 
