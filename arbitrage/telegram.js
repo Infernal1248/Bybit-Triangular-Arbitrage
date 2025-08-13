@@ -15,7 +15,7 @@ async function sendTelegram(text, parseMode = 'HTML', opts = {}) {
     });
     if (!opts.force) lastTgSentAt = now;
   } catch (e) {
-    error('[tg] sendMessage error:', e.message);
+    error('[tg] ошибка отправки сообщения:', e.message);
   }
 }
 

@@ -8,7 +8,7 @@ const path = require("path");
 const app = express();
 const server = app.listen(3000, () =>
   log(
-    "Bybit spot triangular arbitrage finder has started. Please wait while the bot identifies possible paths....."
+    'Бот поиска треугольного арбитража Bybit запущен. Подождите, пока бот ищет возможные пути...'
   )
 );
 

@@ -52,7 +52,7 @@ function writeFlowEvent(evt) {
       fs.appendFile(file, JSON.stringify(rec) + '\n', () => {});
     }
   } catch (e) {
-    error('[log] writeFlowEvent error:', e.message);
+    error('[log] ошибка writeFlowEvent:', e.message);
   }
 }
 
@@ -60,7 +60,7 @@ function ensureLogDir() {
   try {
     if (!fs.existsSync(ARB_LOG_DIR)) fs.mkdirSync(ARB_LOG_DIR, { recursive: true });
   } catch (e) {
-    error('[log] mkdir error:', e.message);
+    error('[log] ошибка mkdir:', e.message);
   }
 }
 
@@ -100,7 +100,7 @@ function logFlow(kind, d, extra = {}) {
       fs.appendFileSync(file, JSON.stringify(row) + '\n', 'utf8');
     }
   } catch (e) {
-    error('[log] write error:', e.message);
+    error('[log] ошибка записи:', e.message);
   }
 }
 
