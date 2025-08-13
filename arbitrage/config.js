@@ -22,6 +22,8 @@ const L1_REQUIRE_MOVEMENT_TO_KEEP = String(process.env.L1_REQUIRE_MOVEMENT_TO_KE
 const ARB_LOG_DIR = process.env.ARB_LOG_DIR || "logs";
 const ARB_LOG_FORMAT = (process.env.ARB_LOG_FORMAT || "json").toLowerCase(); // 'txt' | 'json'
 
+const ORDERBOOK_DEPTH = Number(process.env.ORDERBOOK_DEPTH || 1);
+
 module.exports = {
   BYBIT_KEY,
   BYBIT_SECRET,
@@ -41,4 +43,5 @@ module.exports = {
   L1_REQUIRE_MOVEMENT_TO_KEEP,
   ARB_LOG_DIR,
   ARB_LOG_FORMAT,
+  ORDERBOOK_DEPTH,
 };
