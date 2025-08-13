@@ -18,6 +18,7 @@ const {
   L1_MIN_DISTINCT_STATES,
   L1_REQUIRE_MOVEMENT_TO_START,
   L1_REQUIRE_MOVEMENT_TO_KEEP,
+  ORDERBOOK_DEPTH,
 } = require("./config");
 
 const { sendTelegram, formatFlowStartMsg, formatFlowEndMsg } = require("./telegram");
@@ -26,7 +27,7 @@ const { fetchSpotFeeRates, getFee } = require("./fees");
 
 // ==== ГЛОБАЛ ====
 let pairs = [];
-let symValJ = {};     // { [symbol]: { bidPrice, askPrice, bidQty, askQty } }
+let symValJ = {};     // { [symbol]: { bidPrice, askPrice, bidQty, askQty, bids: [], asks: [] } }
 let validSymbols = [];
 let ws = "";
 let subs = [];
@@ -80,7 +81,7 @@ const getPairs = async () => {
     });
 
     validSymbols.forEach((symbol) => {
-      symValJ[symbol] = { bidPrice: 0, askPrice: 0, bidQty: 0, askQty: 0 };
+      symValJ[symbol] = { bidPrice: 0, askPrice: 0, bidQty: 0, askQty: 0, bids: [], asks: [] };
       l1Hist[symbol] = [];
     });
 
@@ -134,7 +135,7 @@ const getPairs = async () => {
     const newSymValJ = {};
     const newL1Hist = {};
     for (const s of validSymbols) {
-      newSymValJ[s] = symValJ[s] || { bidPrice: 0, askPrice: 0, bidQty: 0, askQty: 0 };
+      newSymValJ[s] = symValJ[s] || { bidPrice: 0, askPrice: 0, bidQty: 0, askQty: 0, bids: [], asks: [] };
       newL1Hist[s] = l1Hist[s] || [];
     }
     symValJ = newSymValJ;
@@ -208,23 +209,26 @@ function hasRecentL1Movement(symbol) {
 const processData = (pl) => {
   try {
     pl = JSON.parse(pl);
-    if (!pl.topic || !pl.topic.startsWith("orderbook.1.")) return;
+    const topicPrefix = `orderbook.${ORDERBOOK_DEPTH}.`;
+    if (!pl.topic || !pl.topic.startsWith(topicPrefix)) return;
 
-    const symbol = pl.topic.slice("orderbook.1.".length);
+    const symbol = pl.topic.slice(topicPrefix.length);
     const data = pl.data;
     if (
         !data ||
-        !Array.isArray(data.b) || data.b.length === 0 ||
-        !Array.isArray(data.a) || data.a.length === 0 ||
-        !Array.isArray(data.b[0]) || data.b[0].length < 2 ||
-        !Array.isArray(data.a[0]) || data.a[0].length < 2
+        !Array.isArray(data.b) || data.b.length < ORDERBOOK_DEPTH ||
+        !Array.isArray(data.a) || data.a.length < ORDERBOOK_DEPTH
     ) return;
 
-    const bidPrice = parseFloat(data.b[0][0]);
-    const askPrice = parseFloat(data.a[0][0]);
-    const bidQty   = parseFloat(data.b[0][1]); // size в базовой монете
-    const askQty   = parseFloat(data.a[0][1]);
-    if (!Number.isFinite(bidPrice) || !Number.isFinite(askPrice) || !Number.isFinite(bidQty) || !Number.isFinite(askQty)) return;
+    const bids = data.b.slice(0, ORDERBOOK_DEPTH).map((lvl) => [parseFloat(lvl[0]), parseFloat(lvl[1])]);
+    const asks = data.a.slice(0, ORDERBOOK_DEPTH).map((lvl) => [parseFloat(lvl[0]), parseFloat(lvl[1])]);
+    if (
+        bids.some(([p, q]) => !Number.isFinite(p) || !Number.isFinite(q)) ||
+        asks.some(([p, q]) => !Number.isFinite(p) || !Number.isFinite(q))
+    ) return;
+
+    const [bidPrice, bidQty] = bids[0];
+    const [askPrice, askQty] = asks[0];
 
     const now = Date.now();
     lastArrival[symbol] = now;
@@ -243,6 +247,8 @@ const processData = (pl) => {
     symValJ[symbol].askPrice = ra;
     symValJ[symbol].bidQty = bidQty;
     symValJ[symbol].askQty = askQty;
+    symValJ[symbol].bids = bids;
+    symValJ[symbol].asks = asks;
 
     // заполняем историю L1
     pushL1(symbol, rb, bidQty, ra, askQty, now);
@@ -485,10 +491,10 @@ const processData = (pl) => {
 // ==== WS ====
 const wsconnect = () => {
   ws = new Websocket("wss://stream.bybit.com/v5/public/spot");
-  subs = validSymbols.map((symbol) => `orderbook.1.${symbol}`);
+  subs = validSymbols.map((symbol) => `orderbook.${ORDERBOOK_DEPTH}.${symbol}`);
 
   ws.on("open", async () => {
-    log("[ws] Открыто. Подписываюсь на orderbook.1 для всех символов…");
+    log(`[ws] Открыто. Подписываюсь на orderbook.${ORDERBOOK_DEPTH} для всех символов…`);
 
     const chunkSize = 10;
     for (let i = 0; i < subs.length; i += chunkSize) {
