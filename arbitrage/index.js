@@ -20,6 +20,7 @@ const {
 const { sendTelegram, formatFlowStartMsg, formatFlowEndMsg } = require("./telegram");
 const { writeFlowEvent, logFlow } = require("./logger");
 const { fetchSpotFeeRates, getFee } = require("./fees");
+const { getBalance, getBalances } = require("./balance");
 
 // ==== ГЛОБАЛ ====
 let pairs = [];
@@ -139,7 +140,7 @@ const getPairs = async () => {
 
     log(`[init] Путей найдено: ${pairs.length} (USDT-first). Символов всего на бирже: ${totalOnExchange}. К подписке: ${validSymbols.length}`);
   } catch (err) {
-    error("Failed to fetch symbols:", err.message);
+    error('[init] Не удалось получить символы:', err.message);
   }
 };
 
@@ -508,7 +509,7 @@ const wsconnect = () => {
     sendTelegram("⚠️ Соединение с Bybit Spot закрыто").catch(() => {});
   });
 
-  ws.on("error", (e) => log("[ws error]", e?.message || e));
+  ws.on("error", (e) => log("[ws ошибка]", e?.message || e));
   ws.on("message", processData);
 
   setInterval(() => {
@@ -529,4 +530,4 @@ function shutdownHandler(sig) {
 process.on("SIGINT", shutdownHandler("SIGINT"));
 process.on("SIGTERM", shutdownHandler("SIGTERM"));
 
-module.exports = { getPairs, wsconnect, eventEmitter };
+module.exports = { getPairs, wsconnect, eventEmitter, getBalance, getBalances };
