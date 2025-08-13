@@ -207,16 +207,10 @@ function hasRecentL1Movement(symbol) {
 const processData = (pl) => {
   try {
     pl = JSON.parse(pl);
-<<<<<<< HEAD
-    if (!pl.topic || !pl.topic.startsWith("orderbook.5.")) return;
-
-    const symbol = pl.topic.slice("orderbook.5.".length);
-=======
     const topicPrefix = `orderbook.${ORDERBOOK_DEPTH}.`;
     if (!pl.topic || !pl.topic.startsWith(topicPrefix)) return;
 
     const symbol = pl.topic.slice(topicPrefix.length);
->>>>>>> origin/8xud3j-codex/add-orderbook_depth-variable-and-usage
     const data = pl.data;
     if (
         !data ||
@@ -495,17 +489,10 @@ const processData = (pl) => {
 // ==== WS ====
 const wsconnect = () => {
   ws = new Websocket("wss://stream.bybit.com/v5/public/spot");
-<<<<<<< HEAD
-  subs = validSymbols.map((symbol) => `orderbook.5.${symbol}`);
-
-  ws.on("open", async () => {
-    log("[ws] Открыто. Подписываюсь на orderbook.5 для всех символов…");
-=======
   subs = validSymbols.map((symbol) => `orderbook.${ORDERBOOK_DEPTH}.${symbol}`);
 
   ws.on("open", async () => {
     log(`[ws] Открыто. Подписываюсь на orderbook.${ORDERBOOK_DEPTH} для всех символов…`);
->>>>>>> origin/8xud3j-codex/add-orderbook_depth-variable-and-usage
 
     const chunkSize = 10;
     for (let i = 0; i < subs.length; i += chunkSize) {
